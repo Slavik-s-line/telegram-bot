@@ -1,52 +1,71 @@
-import logging
+import telebot
+from telebot import types
 import requests
-import datetime
-from aiogram import Bot, Dispatcher, executor, types
+from bs4 import BeautifulSoup as BS
 
-weather_token = "6e8d79779a0c362f14c60a1c7f363e29"
-API_TOKEN = 'BOT TOKEN HERE'
+bot = telebot.TeleBot('1653644021:AAEuuD2PtYXo1YwTVDDgrOotXWE2lDQMxn4')
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+@bot.message_handler(commands=['start'])
+def welcome(message):
 
-# Initialize bot and dispatcher
-bot = Bot(token="5158040057:AAEtt8ByoaJdYMy09MpupqpNAxiCAQnGj-0")
-dp = Dispatcher(bot)
+    # keyboard
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    item1 = types.KeyboardButton("Цитатка")
+    item2 = types.KeyboardButton("Поговори со мной")
+    item3 = types.KeyboardButton("Погода в Киеве")
+    markup.add(item1, item2, item3)
 
-
-@dp.message_handler(commands=['start', 'help'])
-async def send_welcome(message: types.Message):
-    """
-    This handler will be called when user sends `/start` or `/help` command
-    """
-    await message.reply("Привет!\n")
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    buttons = ["Погода\U00002600", "CS:GO"]
-    keyboard.add(*buttons)
-    await message.answer("Выбери одну из кнопок внизу: ", reply_markup=keyboard)
+    bot.send_message(message.chat.id, "Добро пожаловать, {0.first_name}!".format(
+                         message.from_user, bot.get_me()),
+                     parse_mode='html', reply_markup=markup)
 
 
-@dp.message_handler(lambda message: message.text == "Погода\U00002600")
-async def name_city(message: types.Message):
-    await message.reply("Введите название города: ")
+@bot.message_handler(content_types=['text'])
+def lalala(message):
+    if message.chat.type == 'private':
+        if message.text == "Цитатка":
+            bot.send_message(message.chat.id,
+                             "Никто не может грустить, когда у него есть воздушный шарик!\n"".\n"
+                                              "Алан Александр Милн")
+        elif message.text == 'Поговори со мной':
 
-    @dp.message_handler()
-    async def without_puree(message: types.Message):
-        try:
-            r = requests.get(
-                f"http://api.openweathermap.org/data/2.5/weather?q={message.text}&appid={weather_token}&units=metric")
-            data = r.json()
-            city = data["name"]
-            temperature = round(data["main"]["temp"])
-            humidity = round(data["main"]["humidity"])
-            pressure = round(data["main"]["pressure"])
-            wind = round(data["wind"]["speed"])
-            await message.reply(f"***{datetime.datetime.now().strftime('%b %d %Y %H:%M')}***\n"
-                                f"Погода в городе {city}\nТемпература {temperature} C°\n"
-                                f"Влажность: {humidity} %\nДавление: {pressure} мм.рт.ст.\n"
-                                f"Ветер: {wind} м/с\n ")
-        except:
-            await message.reply("\U00002620 Проверьте название города \U00002620")
+            markup = types.InlineKeyboardMarkup(row_width=2)
+            item1 = types.InlineKeyboardButton("Хорошо", callback_data='good')
+            item2 = types.InlineKeyboardButton("Не очень", callback_data='bad')
 
-if __name__ == '__main__':
-    executor.start_polling(dp, skip_updates=True)
+            markup.add(item1, item2)
+
+            bot.send_message(message.chat.id, 'Как ты, бродяга?', reply_markup=markup)
+
+        elif message.text == 'Погода в Киеве':
+            r = requests.get('https://sinoptik.ua/погода-киев')
+            html = BS(r.content, 'html.parser')
+            for el in html.select('#content'):
+                t_min = el.select('.temperature .min')[0].text
+                t_max = el.select('.temperature .max')[0].text
+                text = el.select('.wDescription .description')[0].text
+            bot.send_message(message.chat.id, "Привет, погода на сегодня:\n" +
+                             t_min + ', ' + t_max + '\n' + text)
+        else:
+            bot.send_message(message.chat.id, 'Я не знаю что ответить 😢')
+
+
+@bot.callback_query_handler(func=lambda call: True)
+def callback_inline(call):
+    try:
+        if call.message:
+            if call.data == 'good':
+                bot.send_message(call.message.chat.id, 'Вот и отличненько 😊')
+            elif call.data == 'bad':
+                bot.send_message(call.message.chat.id, 'Бывает 😢')
+
+            # show alert
+            bot.answer_callback_query(callback_query_id=call.id, show_alert=False,
+                                      text="ЭТО ТЕСТОВОЕ УВЕДОМЛЕНИЕ!!11")
+
+    except Exception as e:
+        print(repr(e))
+
+
+# RUN
+bot.polling(none_stop=True)
